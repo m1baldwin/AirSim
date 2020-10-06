@@ -95,6 +95,7 @@ void AirsimROSWrapper::initialize_ros()
 {
 
     // ros params
+    
     double update_airsim_control_every_n_sec;
     nh_private_.getParam("is_vulkan", is_vulkan_);
     nh_private_.getParam("update_airsim_control_every_n_sec", update_airsim_control_every_n_sec);
@@ -108,7 +109,7 @@ void AirsimROSWrapper::initialize_ros()
     // todo enforce dynamics constraints in this node as well?
     // nh_.getParam("max_vert_vel_", max_vert_vel_);
     // nh_.getParam("max_horz_vel", max_horz_vel_)
-
+    
     create_ros_pubs_from_settings_json();
     airsim_control_update_timer_ = nh_private_.createTimer(ros::Duration(update_airsim_control_every_n_sec), &AirsimROSWrapper::drone_state_timer_cb, this);
 }
@@ -127,7 +128,7 @@ void AirsimROSWrapper::create_ros_pubs_from_settings_json()
     camera_info_msg_vec_.clear();
     vehicle_name_ptr_map_.clear();
     size_t lidar_cnt = 0;
-
+    
     image_transport::ImageTransport image_transporter(nh_private_);
 
     // iterate over std::map<std::string, std::unique_ptr<VehicleSetting>> vehicles;
@@ -219,7 +220,7 @@ void AirsimROSWrapper::create_ros_pubs_from_settings_json()
 
                     image_pub_vec_.push_back(image_transporter.advertise(curr_vehicle_name + "/" + curr_camera_name + "/" + image_type_int_to_string_map_.at(capture_setting.image_type), 1));
                     cam_info_pub_vec_.push_back(nh_private_.advertise<sensor_msgs::CameraInfo> (curr_vehicle_name + "/" + curr_camera_name + "/" + image_type_int_to_string_map_.at(capture_setting.image_type) + "/camera_info", 10));
-                    camera_info_msg_vec_.push_back(generate_cam_info(curr_camera_name, camera_setting, capture_setting));
+                    camera_info_msg_vec_.push_back(generate_cam_info(curr_camera_name, camera_setting, capture_setting, curr_vehicle_name));
                 }
             }
             // push back pair (vector of image captures, current vehicle name) 
@@ -1452,15 +1453,26 @@ sensor_msgs::ImagePtr AirsimROSWrapper::get_depth_img_msg_from_response(const Im
 // todo have a special stereo pair mode and get projection matrix by calculating offset wrt drone body frame?
 sensor_msgs::CameraInfo AirsimROSWrapper::generate_cam_info(const std::string& camera_name,
                                                             const CameraSetting& camera_setting,
-                                                            const CaptureSetting& capture_setting) const
+                                                            const CaptureSetting& capture_setting,
+                                                            const std::string& vehicle_name) const
 {
+    
     sensor_msgs::CameraInfo cam_info_msg;
     cam_info_msg.header.frame_id = camera_name + "/" + image_type_int_to_string_map_.at(capture_setting.image_type) + "_optical";
     cam_info_msg.height = capture_setting.height;
     cam_info_msg.width = capture_setting.width;
-    //Assume Camera is ideal - zero distortion. TODO Add a way to specify non-ideal distortion params? Also, is this the case for all image types, or only scene?
+    //TODO: Currently, getDistortion is only working for Scene type cameras, so only make the api call if that is the case.
     cam_info_msg.distortion_model = "plumb_bob";
-    cam_info_msg.D = {0, 0, 0, 0, 0};
+    if(capture_setting.image_type == 0)
+    {
+        std::cout << "camera_name: " << camera_name << vehicle_name << std::endl;
+        std::vector<float> d_params = airsim_client_->simGetDistortionParams(camera_name, vehicle_name); //Order returned is k1, k2, k3, t1, t2. Cam Info message expects order to be k1, k2, t1, t2, k3
+        std::cout << "herehh" << std::endl;
+        cam_info_msg.D = {d_params[0], d_params[1], d_params[3], d_params[4], 1};
+    }else{
+        cam_info_msg.D = {0, 0, 0, 0, 2.0};
+    }
+
     float f_x = (capture_setting.width / 2.0) / tan(math_common::deg2rad(capture_setting.fov_degrees / 2.0));
     // todo focal length in Y direction should be same as X it seems. this can change in future a scene capture component which exactly correponds to a cine camera
     // float f_y = (capture_setting.height / 2.0) / tan(math_common::deg2rad(fov_degrees / 2.0));

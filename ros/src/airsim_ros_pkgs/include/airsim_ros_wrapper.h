@@ -256,7 +256,7 @@ private:
     void publish_odom_tf(const nav_msgs::Odometry& odom_msg);
 
     /// camera helper methods
-    sensor_msgs::CameraInfo generate_cam_info(const std::string& camera_name, const CameraSetting& camera_setting, const CaptureSetting& capture_setting) const;
+    sensor_msgs::CameraInfo generate_cam_info(const std::string& camera_name, const CameraSetting& camera_setting, const CaptureSetting& capture_setting, const std::string& vehicle_name) const;
     cv::Mat manual_decode_depth(const ImageResponse& img_response) const;
 
     sensor_msgs::ImagePtr get_img_msg_from_response(const ImageResponse& img_response, const ros::Time curr_ros_time, const std::string frame_id);
